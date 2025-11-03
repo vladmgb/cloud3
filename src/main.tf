@@ -147,35 +147,6 @@ resource "yandex_compute_instance" "private_vm" {
   }
 }
 
-###### Object Storage
-
-resource "yandex_storage_bucket" "my-bucket" {
-  bucket = var.bucket_name
-
-  website {
-    index_document = "index.html"
-    error_document = "error.html"
-  }
-
-  max_size = 1073741824
-
-  anonymous_access_flags {
-    read = true
-    list = true
-  }
-}
-
-resource "yandex_storage_object" "my-image" {
-  bucket = yandex_storage_bucket.my-bucket.id
-  key    = "image.jpg"
-  source = var.image_file_path
-  acl    = "public-read"
-
-  depends_on = [
-    yandex_storage_bucket.my-bucket
-  ]
-}
-
 
 ####### Instance Group
 
@@ -406,11 +377,70 @@ resource "yandex_alb_load_balancer" "lamp_app_balancer" {
   }
 }
 
-#### KMS Symmetric Key
+#### KMS Key
 
-resource "yandex_kms_symmetric_key" "my-key" {
+resource "yandex_kms_symmetric_key" "my_key" {
   name              = "my-symetric-key"
-  description       = "My key"
-  default_algorithm = "AES_256"
-  rotation_period   = "8760h"
+  description       = "My symetric key"
+  default_algorithm = var.kms_default_algorithm
+  rotation_period   = var.kms_rotation_period
 }
+
+resource "yandex_kms_symmetric_key_iam_binding" "my_encrypter" {
+  symmetric_key_id = yandex_kms_symmetric_key.my_key.id
+  role             = "kms.keys.encrypterDecrypter"
+  
+  members = [
+    "serviceAccount:${yandex_iam_service_account.bucket_manager.id}",
+  ]
+}
+
+resource "yandex_iam_service_account" "bucket_manager" {
+  name        = "bucket-manager"
+  description = "Service account for managing encrypted bucket"
+}
+
+
+###### Object Storage with encryption
+
+resource "yandex_storage_bucket" "my-bucket" {
+  bucket = var.bucket_name
+
+  website {
+    index_document = "index.html"
+    error_document = "error.html"
+  }
+
+  max_size = 1073741824
+
+  anonymous_access_flags {
+    read = true
+    list = true
+  }
+
+  # Encryption
+  server_side_encryption_configuration {
+    rule {
+      apply_server_side_encryption_by_default {
+        kms_master_key_id = yandex_kms_symmetric_key.my_key.id
+        sse_algorithm     = "aws:kms"
+      }
+    }
+  }
+
+  versioning {
+    enabled = true
+  }
+}
+
+resource "yandex_storage_object" "my-image-encrypted" {
+  bucket = yandex_storage_bucket.my-bucket.id
+  key    = "image.jpg"
+  source = var.image_file_path
+  acl    = "public-read"
+
+  depends_on = [
+    yandex_storage_bucket.my-bucket
+  ]
+}
+

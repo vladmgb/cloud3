@@ -54,6 +54,7 @@ variable "bucket_name" {
   description = "Name of the Object Storage bucket"
 }
 
+
 variable "image_file_path" {
   type        = string
   default     = "./image.jpg"
@@ -109,4 +110,17 @@ variable "region" {
   description = "Yandex.Cloud region"
   type        = string
   default     = "ru-central1"
+}
+
+
+variable "kms_default_algorithm" {
+  description = "Default encryption algorithm for KMS key"
+  type        = string
+  default     = "AES_128"
+}
+
+variable "kms_rotation_period" {
+  description = "Key rotation period in hours"
+  type        = string
+  default     = "8760h" # 1 год
 }
